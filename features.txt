@@ -1,0 +1,241 @@
+{
+  "features-webcam": [
+    "L_elbow_angle_mean",
+    "L_elbow_angle_std",
+    "R_elbow_angle_mean",
+    "R_elbow_angle_std",
+    "L_shoulder_angle_mean",
+    "L_shoulder_angle_std",
+    "R_shoulder_angle_mean",
+    "R_shoulder_angle_std",
+    "L_shoulder_speed_mean",
+    "L_shoulder_speed_std",
+    "R_shoulder_speed_mean",
+    "R_shoulder_speed_std",
+    "L_angle_vel_mean",
+    "L_angle_vel_std",
+    "R_angle_vel_mean",
+    "R_angle_vel_std",
+    "L_smoothness_mean",
+    "L_smoothness_std",
+    "R_smoothness_mean",
+    "R_smoothness_std",
+    "L_shoulder_speed_norm_mean",
+    "L_shoulder_speed_norm_std",
+    "R_shoulder_speed_norm_mean",
+    "R_shoulder_speed_norm_std"
+  ]
+}
+
+
+
+
+[keystroke=>
+  "TypingSpeed_WPM",
+  "AverageDwellTime",
+  "Consistency",
+  "Errors",
+  "CorrectionBehavior",
+  "AverageFlightTime",
+  "IdleTime_Ratio",
+  "KeyLatency_Mean",
+  "KeyLatency_Std",
+  "AccuracyScore"
+]
+
+
+
+[
+  "distance_error",
+  "time_taken_ms",
+  "path_length_px",
+  "path_efficiency",
+  "movement_jerk",
+  "log_movement_jerk",
+  "aiming_error",
+  "task_type"
+]
+
+
+
+
+
+
+models 
+
+feature_columns = ['Errors', 'CorrectionBehavior', 'TypingSpeed_WPM', 'TypingSpeed_CPM', 'AverageDwellTime', 'AverageFlightTime', 'Consistency']
+
+{
+  "Lelbowangle_mean": 0.0,
+  "Relbowangle_mean": 0.0,
+  "Lshoulderangle_mean": 0.0,
+  "Rshoulderangle_mean": 0.0,
+  "Lshoulderspeed_mean": 0.0,
+  "Rshoulderspeed_mean": 0.0,
+  "Lsmoothness_mean": 0.0,
+  "Rsmoothness_mean": 0.0,
+  "Langlevel_mean": 0.0,
+  "Ranglevel_mean": 0.0,
+  "Lshoulderspeednorm_mean": 0.0,
+  "Rshoulderspeednorm_mean": 0.0,
+  "Lelbowangle_std": 0.0,
+  "Relbowangle_std": 0.0,
+  "Lshoulderangle_std": 0.0,
+  "Rshoulderangle_std": 0.0,
+  "Lshoulderspeed_std": 0.0,
+  "Rshoulderspeed_std": 0.0,
+  "Lsmoothness_std": 0.0,
+  "Rsmoothness_std": 0.0,
+  "Langlevel_std": 0.0,
+  "Ranglevel_std": 0.0,
+  "Lshoulderspeednorm_std": 0.0,
+  "Rshoulderspeednorm_std": 0.0,
+  "Lelbowangle_range": 0.0,
+  "Relbowangle_range": 0.0,
+  "Lsmoothness_sparc": 0.0,
+  "Rsmoothness_sparc": 0.0,
+  "LelbowROM": 0.0,
+  "RelbowROM": 0.0,
+  "elbowROM_ratio": 0.0,
+  "Lelbowangle_max": 0.0,
+  "Relbowangle_max": 0.0,
+  "Lelbowangle_min": 0.0,
+  "Relbowangle_min": 0.0,
+  "Lshoulderangle_max": 0.0,
+  "Rshoulderangle_max": 0.0,
+  "Lshoulderangle_min": 0.0,
+  "Rshoulderangle_min": 0.0,
+  "Lshoulderspeed_max": 0.0,
+  "Rshoulderspeed_max": 0.0,
+  "Lshoulderspeed_min": 0.0,
+  "Rshoulderspeed_min": 0.0,
+  "Lshoulderspeednorm_max": 0.0,
+  "Rshoulderspeednorm_max": 0.0,
+  "Lshoulderspeednorm_min": 0.0,
+  "Rshoulderspeednorm_min": 0.0,
+  "Lelbowangle_LRdiff": 0.0,
+  "Lelbowangle_LRratio": 0.0,
+  "Lshoulderspeed_LRdiff": 0.0,
+  "Lshoulderspeed_LRratio": 0.0,
+  "Lshoulderspeednorm_LRdiff": 0.0,
+  "Lshoulderspeednorm_LRratio": 0.0,
+  "Lsparcsmoothness_LRdiff": 0.0,
+  "Lsparcsmoothness_LRratio": 0.0
+}
+
+
+import numpy as np
+import joblib
+import pandas as pd
+try:
+    # This works when running as part of the FastAPI app
+    from .pose_analysis import PoseAnalyzer
+except ImportError:
+    # This works when running the script directly for testing
+    from pose_analysis import PoseAnalyzer
+class WebcamModel:
+    def __init__(self):
+        """Initialize webcam ML models."""
+        self.pose_analyzer = PoseAnalyzer()  # shared instance to keep motion history
+        self.encoder = joblib.load("models/label_encoder_both.pkl")
+        self.model_class = joblib.load("models/recovery_model_xgb_both.pkl")
+        self.model_reg = joblib.load("models/recovery_regressor_both.pkl")
+
+    def _create_features_from_landmarks(self, landmark_data: list) -> dict:
+        """
+        Processes raw landmark data into a dictionary of 56 aggregated features.
+        """
+        try:
+            if not landmark_data or len(landmark_data) < 5:
+                print("❌ Not enough landmark data to process.")
+                return None
+
+            per_frame_features = []
+            for frame_data in landmark_data:
+                landmarks = frame_data.get("landmarks")
+                timestamp = frame_data.get("timestamp")
+                if landmarks and timestamp:
+                    frame_features = self.pose_analyzer.process_landmarks(landmarks, timestamp)
+                    per_frame_features.append(frame_features)
+            
+            if not per_frame_features:
+                print("⚠️ Feature extraction from landmarks failed.")
+                return None
+
+            df = pd.DataFrame(per_frame_features)
+            aggregated_features = {}
+            
+            base_cols = ["Lelbowangle", "Relbowangle", "Lshoulderangle", "Rshoulderangle", 
+                         "Lshoulderspeed", "Rshoulderspeed", "Lsmoothness", "Rsmoothness",
+                         "Langlevel", "Ranglevel", "Lshoulderspeednorm", "Rshoulderspeednorm"]
+
+            for col in base_cols:
+                aggregated_features[f'{col}_mean'] = df[col].mean()
+                aggregated_features[f'{col}_std'] = df[col].std()
+                aggregated_features[f'{col}_max'] = df[col].max()
+                aggregated_features[f'{col}_min'] = df[col].min()
+
+            aggregated_features['Lelbowangle_range'] = aggregated_features['Lelbowangle_max'] - aggregated_features['Lelbowangle_min']
+            aggregated_features['Relbowangle_range'] = aggregated_features['Relbowangle_max'] - aggregated_features['Relbowangle_min']
+            aggregated_features['Lsmoothness_sparc'] = -np.log(np.mean(df['Lsmoothness']) + 1e-8)
+            aggregated_features['Rsmoothness_sparc'] = -np.log(np.mean(df['Rsmoothness']) + 1e-8)
+            aggregated_features['LelbowROM'] = aggregated_features['Lelbowangle_range']
+            aggregated_features['RelbowROM'] = aggregated_features['Relbowangle_range']
+            aggregated_features['elbowROM_ratio'] = aggregated_features['LelbowROM'] / (aggregated_features['RelbowROM'] + 1e-8)
+            
+            for col in ["elbowangle", "shoulderspeed", "shoulderspeednorm"]:
+                aggregated_features[f'L{col}_LRdiff'] = aggregated_features[f'L{col}_mean'] - aggregated_features[f'R{col}_mean']
+                aggregated_features[f'L{col}_LRratio'] = aggregated_features[f'L{col}_mean'] / (aggregated_features[f'R{col}_mean'] + 1e-8)
+            
+            aggregated_features['Lsparcsmoothness_LRdiff'] = aggregated_features['Lsmoothness_sparc'] - aggregated_features['Rsmoothness_sparc']
+            aggregated_features['Lsparcsmoothness_LRratio'] = aggregated_features['Lsmoothness_sparc'] / (aggregated_features['Rsmoothness_sparc'] + 1e-8)
+            
+            return aggregated_features
+
+        except Exception as e:
+            print(f"⚠️ Error during feature creation from landmarks: {e}")
+            return None
+
+    def predict(self, features: dict):
+        """
+        Predicts recovery score from either raw landmark data or aggregated features.
+        """
+        try:
+            if "landmark_data" in features:
+                aggregated_features = self._create_features_from_landmarks(features["landmark_data"])
+                if not aggregated_features:
+                    return None
+            else:
+                aggregated_features = features
+
+            # Create feature vector in the correct order expected by the model
+            # This relies on the fact that the regressor and classifier were trained on the same features.
+            feature_names = self.model_reg.feature_names_in_
+            feature_vector = [aggregated_features.get(f, 0) for f in feature_names]
+            X = np.array([feature_vector], dtype=float)
+
+            # Run predictions
+            y_class = self.model_class.predict(X)[0]
+            y_score = self.model_reg.predict(X)[0]
+
+            class_label = self.encoder.inverse_transform([int(y_class)])[0]
+
+            # Debugging feedback (shows movement dynamics)
+            print(f"📈 Predicted Score: {y_score:.3f}, Class: {class_label}")
+            print(f"💪 Sample Features (elbow angle/smoothness): {X[0, 10:15]}")
+
+            return {
+                "recovery_score": float(y_score),
+                "class_prediction": str(class_label)
+            }
+
+        except Exception as e:
+            print(f"⚠️ Webcam prediction error: {e}")
+            return None
+
+# Create a single instance of the model to be used by the API
+_webcam_model_instance = WebcamModel()
+
+def predict_webcam(features: dict):
+    """Function to be called from the API."""
+    return _webcam_model_instance.predict(features)
