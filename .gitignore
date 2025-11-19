@@ -5,6 +5,12 @@ models/
 *.pkl
 *.joblib
 
+__pycache__/
+backend/__pycache__/
+
+*.pyc
+# PDF reports
+backend/generated_pdfs/
 # Logs
 logs
 *.log
